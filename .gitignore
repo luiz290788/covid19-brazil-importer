@@ -1,0 +1,5 @@
+token.txt
+covid19-radar-*.json
+.vscode
+*.log
+*.zip
