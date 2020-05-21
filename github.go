@@ -4,6 +4,9 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/ioutil"
+	"log"
 	"strings"
 
 	"github.com/google/go-github/github"
@@ -35,11 +38,15 @@ func getFileSha(ctx context.Context, client *github.Client, properties *properti
 }
 
 func updateFile(ctx context.Context, client *github.Client, properties *properties,
-	content []byte) (*github.RepositoryContentResponse, error) {
+	reader io.Reader) (*github.RepositoryContentResponse, error) {
 
 	sha, err := getFileSha(ctx, client, properties)
 	if err != nil {
 		return nil, err
+	}
+	content, readerErr := ioutil.ReadAll(reader)
+	if readerErr != nil {
+		log.Fatalf("Error while reading content: %s", readerErr.Error())
 	}
 
 	contentResponse, _, err := client.Repositories.UpdateFile(ctx, properties.RepoOwner,
