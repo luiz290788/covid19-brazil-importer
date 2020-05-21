@@ -1,12 +1,27 @@
 package covid19brazilimporter
 
 import (
-	"encoding/csv"
 	"encoding/json"
+	"errors"
 	"io/ioutil"
 	"net/http"
 	"time"
 )
+
+// Entry read from the data file
+type Entry struct {
+	Region string
+	Cases  int
+	Date   time.Time
+	Deaths int
+}
+
+type dataReader interface {
+	read(fileURL string) (chan *Entry, error)
+	supports(fileURL string) bool
+}
+
+var readers = []dataReader{CSVReader{}, XLSXReader{}}
 
 const portalGeralURL = "https://xx9p7hp1p7.execute-api.us-east-1.amazonaws.com/prod/PortalGeral"
 
@@ -42,23 +57,14 @@ func getMetaData() result {
 	return results.Results[0]
 }
 
-func getData(fileURL string) *csv.Reader {
-	resp, _ := http.Get(fileURL)
-	reader := csv.NewReader(resp.Body)
-	reader.Comma = ';'
-	return reader
-}
-
-func readData(fileURL string) chan []string {
-	dataChannel := make(chan []string)
-
-	go func() {
-		reader := getData(fileURL)
-		for line, _ := reader.Read(); line != nil; line, _ = reader.Read() {
-			dataChannel <- line
+// ReadData checks the file extensions ans uses the correct
+// method to read the data.
+func ReadData(fileURL string) (chan *Entry, error) {
+	for _, reader := range readers {
+		if reader.supports(fileURL) {
+			return reader.read(fileURL)
 		}
-		close(dataChannel)
-	}()
+	}
 
-	return dataChannel
+	return nil, errors.New("unsupported data file")
 }
