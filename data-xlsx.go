@@ -16,7 +16,7 @@ const cityCol = 2
 const codMunCol = 4
 const dateCol = 7
 const casesCol = 10
-const deathsCol = 11
+const deathsCol = 12
 
 // XLSXReader is a data reader for xlsx files
 type XLSXReader struct{}
