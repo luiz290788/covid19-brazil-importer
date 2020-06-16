@@ -17,11 +17,11 @@ type Entry struct {
 }
 
 type dataReader interface {
-	read(fileURL string) (chan *Entry, error)
+	read(fileURL string) (Regions, error)
 	supports(fileURL string) bool
 }
 
-var readers = []dataReader{CSVReader{}, XLSXReader{}}
+var readers = []dataReader{XLSXReader{}}
 
 const portalGeralURL = "https://xx9p7hp1p7.execute-api.us-east-1.amazonaws.com/prod/PortalGeral"
 
@@ -45,7 +45,7 @@ type results struct {
 	Results []result `json:"results"`
 }
 
-func getMetaData() result {
+func GetMetaData() result {
 	req, _ := http.NewRequest("GET", portalGeralURL, nil)
 	for k, v := range headers {
 		req.Header.Add(k, v)
@@ -59,7 +59,7 @@ func getMetaData() result {
 
 // ReadData checks the file extensions ans uses the correct
 // method to read the data.
-func ReadData(fileURL string) (chan *Entry, error) {
+func ReadData(fileURL string) (Regions, error) {
 	for _, reader := range readers {
 		if reader.supports(fileURL) {
 			return reader.read(fileURL)

@@ -2,51 +2,46 @@ package covid19brazilimporter
 
 import (
 	"context"
-	"encoding/csv"
+	"encoding/json"
 	"fmt"
-	"io"
+	"io/ioutil"
 	"log"
 	"os"
 
 	"cloud.google.com/go/firestore"
+	"github.com/go-git/go-git/v5"
 )
-
-func buildFileContents(fileURL string, writer *io.PipeWriter) error {
-	log.Println("Building file")
-	defer writer.Close()
-	dataChannel, err := ReadData(fileURL)
-	if err != nil {
-		return err
-	}
-
-	csvWriter := csv.NewWriter(writer)
-	csvWriter.Write([]string{"Date", "Region", "Cases", "Deaths"})
-	for newEntry := range dataChannel {
-		newLine := []string{serializeDate(newEntry.Date), newEntry.Region,
-			fmt.Sprintf("%d", newEntry.Cases), fmt.Sprintf("%d", newEntry.Deaths)}
-		csvWriter.Write(newLine)
-	}
-
-	csvWriter.Flush()
-	log.Println("Finished building file")
-	return nil
-}
 
 // PubSubMessage is the struct that define the received through the PubSub trigger
 type PubSubMessage struct {
 	Data []byte `json:"data"`
 }
 
+func dumpRegions(folder string, regions Regions) (err error) {
+	os.MkdirAll(folder, 0700)
+	for key, value := range regions {
+		var file *os.File
+		filename := fmt.Sprintf("%s/%d.json", folder, key)
+		file, err = os.Create(filename)
+		if err != nil {
+			return
+		}
+		encoder := json.NewEncoder(file)
+		encoder.Encode(value)
+		file.Close()
+	}
+	return
+}
+
 // ImportData is the main function that will trigger the import of data
 func ImportData(ctx context.Context, message PubSubMessage) error {
-
 	firestoreClient, firestoreError := firestore.NewClient(ctx, projectID)
 	defer firestoreClient.Close()
 	if firestoreError != nil {
 		log.Panicln(firestoreError.Error())
 		return firestoreError
 	}
-	metadata := getMetaData()
+	metadata := GetMetaData()
 
 	lastUpdate, lastUpdateError := getLastUpdate(ctx, firestoreClient)
 	if lastUpdateError != nil {
@@ -58,22 +53,43 @@ func ImportData(ctx context.Context, message PubSubMessage) error {
 		return nil
 	}
 
-	reader, writer := io.Pipe()
-
-	go buildFileContents(metadata.File.URL, writer)
+	fmt.Println(metadata.File.URL)
 
 	properties, propertiesError := getProperties(ctx, firestoreClient)
 	if propertiesError != nil {
 		return propertiesError
 	}
-	client := buildGithubClient(ctx, os.Getenv("GITHUB_TOKEN"))
 
-	_, updateFileError := updateFile(ctx, client, properties, reader)
-	if updateFileError != nil {
-		log.Panicln(updateFileError.Error())
-		return updateFileError
+	var regions Regions
+	var err error
+	regions, err = ReadData(metadata.File.URL)
+	if err != nil {
+		return err
 	}
+
+	folder, _ := ioutil.TempDir("", "regions-*")
+	fmt.Println(folder)
+
+	repository, _ := cloneRepo(folder, os.Getenv("GITHUB_TOKEN"), properties.Branch)
+
+	err = dumpRegions(fmt.Sprintf("%s/src/data/covid", folder), regions)
+	if err != nil {
+		return err
+	}
+
+	_, err = commitAll(repository, properties.CommitMessage, properties.CommiterName,
+		properties.CommiterEmail)
+	if err != nil {
+		return err
+	}
+
+	err = repository.Push(&git.PushOptions{})
+	if err != nil {
+		return err
+	}
+
 	setLastUpdate(ctx, firestoreClient)
 	log.Println("update done")
+
 	return nil
 }

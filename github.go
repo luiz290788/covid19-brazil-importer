@@ -1,64 +1,53 @@
 package covid19brazilimporter
 
 import (
-	"context"
-	"errors"
 	"fmt"
-	"io"
-	"io/ioutil"
-	"log"
-	"strings"
+	"time"
 
-	"github.com/google/go-github/github"
-	"golang.org/x/oauth2"
+	"github.com/go-git/go-git/v5"
+	"github.com/go-git/go-git/v5/plumbing"
+	"github.com/go-git/go-git/v5/plumbing/object"
 )
 
-func buildGithubClient(ctx context.Context, token string) *github.Client {
-	ts := oauth2.StaticTokenSource(
-		&oauth2.Token{AccessToken: token},
-	)
-	tc := oauth2.NewClient(ctx, ts)
-	return github.NewClient(tc)
+func cloneRepo(folder, password, branch string) (*git.Repository, error) {
+	url := fmt.Sprintf("https://luiz290788:%s@github.com/luiz290788/covid19-brazil.git", password)
+	return git.PlainClone(folder, false, &git.CloneOptions{
+		URL:           url,
+		Depth:         1,
+		ReferenceName: plumbing.NewBranchReferenceName(branch),
+	})
+
 }
 
-func getFileSha(ctx context.Context, client *github.Client, properties *properties) (*string, error) {
-
-	treeSha := fmt.Sprintf("%v^{tree}:src/data", properties.Branch)
-
-	tree, _, err := client.Git.GetTree(context.Background(), properties.RepoOwner, properties.Repo, treeSha, false)
+func commitAll(repository *git.Repository, message, name, email string) (hash string, err error) {
+	var worktree *git.Worktree
+	worktree, err = repository.Worktree()
 	if err != nil {
-		return nil, err
+		return
 	}
-	for _, entry := range tree.Entries {
-		if strings.HasSuffix(properties.Filename, entry.GetPath()) {
-			return entry.SHA, nil
-		}
-	}
-	return nil, errors.New("file not found")
-}
 
-func updateFile(ctx context.Context, client *github.Client, properties *properties,
-	reader io.Reader) (*github.RepositoryContentResponse, error) {
-
-	sha, err := getFileSha(ctx, client, properties)
+	err = worktree.AddGlob("src/data/covid/*.json")
 	if err != nil {
-		return nil, err
-	}
-	content, readerErr := ioutil.ReadAll(reader)
-	if readerErr != nil {
-		log.Fatalf("Error while reading content: %s", readerErr.Error())
+		return
 	}
 
-	contentResponse, _, err := client.Repositories.UpdateFile(ctx, properties.RepoOwner,
-		properties.Repo, properties.Filename, &github.RepositoryContentFileOptions{
-			SHA:     sha,
-			Branch:  &properties.Branch,
-			Content: content,
-			Message: &properties.CommitMessage,
-			Committer: &github.CommitAuthor{
-				Name:  &properties.CommiterName,
-				Email: &properties.CommiterEmail,
-			},
-		})
-	return contentResponse, err
+	var commitHash plumbing.Hash
+	commitHash, err = worktree.Commit(message, &git.CommitOptions{
+		Author: &object.Signature{
+			Email: email,
+			Name:  name,
+			When:  time.Now(),
+		},
+		Committer: &object.Signature{
+			Email: email,
+			Name:  name,
+			When:  time.Now(),
+		},
+	})
+
+	if err != nil {
+		return
+	}
+
+	return commitHash.String(), nil
 }
