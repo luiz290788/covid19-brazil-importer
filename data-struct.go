@@ -52,21 +52,30 @@ type DataEntry struct {
 
 type Regions map[RegionID]*Region
 
+func getOrDefault(row []*string, index int, defaultValue *string) *string {
+	if len(row) > index && index >= 0 {
+		return row[index]
+	}
+	return defaultValue
+}
+
 func readDataEntry(row []*string) (*DataEntry, error) {
 	// var err error = nil
 	var date time.Time
 	var week, cases, newCases, deaths, newDeaths, recovered, underTreatment int
 
-	date, _ = parseDate(*row[dateCol])
-	week, _ = strconv.Atoi(*row[weekCol])
-	cases, _ = strconv.Atoi(*row[casesCol])
-	newCases, _ = strconv.Atoi(*row[newCasesCol])
-	deaths, _ = strconv.Atoi(*row[deathsCol])
-	newDeaths, _ = strconv.Atoi(*row[newDeathsCol])
+	defaultValue := "0"
+
+	date, _ = parseDate(*getOrDefault(row, dateCol, &defaultValue))
+	week, _ = strconv.Atoi(*getOrDefault(row, weekCol, &defaultValue))
+	cases, _ = strconv.Atoi(*getOrDefault(row, casesCol, &defaultValue))
+	newCases, _ = strconv.Atoi(*getOrDefault(row, newCasesCol, &defaultValue))
+	deaths, _ = strconv.Atoi(*getOrDefault(row, deathsCol, &defaultValue))
+	newDeaths, _ = strconv.Atoi(*getOrDefault(row, newDeathsCol, &defaultValue))
 	// Use 0 if error
-	recovered, _ = strconv.Atoi(*row[recoveredCol])
+	recovered, _ = strconv.Atoi(*getOrDefault(row, recoveredCol, &defaultValue))
 	// Use 0 if error
-	underTreatment, _ = strconv.Atoi(*row[underTreatmentCol])
+	underTreatment, _ = strconv.Atoi(*getOrDefault(row, underTreatmentCol, &defaultValue))
 
 	return &DataEntry{
 		Date:           date,

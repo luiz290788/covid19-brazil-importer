@@ -23,7 +23,7 @@ type dataReader interface {
 
 var readers = []dataReader{XLSXReader{}}
 
-const portalGeralURL = "https://xx9p7hp1p7.execute-api.us-east-1.amazonaws.com/prod/PortalGeral"
+const portalGeralURL = "https://xx9p7hp1p7.execute-api.us-east-1.amazonaws.com/prod/PortalGeralApi"
 
 var headers = map[string]string{
 	"Pragma":                 "no-cache",
@@ -45,6 +45,15 @@ type results struct {
 	Results []result `json:"results"`
 }
 
+type spreadSheet struct {
+	File      file      `json:"arquivo"`
+	UpdatedAt time.Time `json:"updatedAt"`
+}
+
+type portalGeralAPI struct {
+	SpreadSheet spreadSheet `json:"planilha"`
+}
+
 func GetMetaData() result {
 	req, _ := http.NewRequest("GET", portalGeralURL, nil)
 	for k, v := range headers {
@@ -52,9 +61,12 @@ func GetMetaData() result {
 	}
 	resp, _ := http.DefaultClient.Do(req)
 	data, _ := ioutil.ReadAll(resp.Body)
-	var results results
-	json.Unmarshal(data, &results)
-	return results.Results[0]
+	var portalGeralAPI portalGeralAPI
+	json.Unmarshal(data, &portalGeralAPI)
+	return result{
+		File:      portalGeralAPI.SpreadSheet.File,
+		UpdatedAt: portalGeralAPI.SpreadSheet.UpdatedAt,
+	}
 }
 
 // ReadData checks the file extensions ans uses the correct
