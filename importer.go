@@ -7,6 +7,7 @@ import (
 	"io/ioutil"
 	"log"
 	"os"
+	"time"
 
 	"cloud.google.com/go/firestore"
 	"github.com/go-git/go-git/v5"
@@ -17,18 +18,43 @@ type PubSubMessage struct {
 	Data []byte `json:"data"`
 }
 
+type LastUpdated struct {
+	Date time.Time `json:"date"`
+}
+
+func writeToFile(filepath string, data interface{}) (err error) {
+	var file *os.File
+	file, err = os.Create(filepath)
+	if err != nil {
+		return
+	}
+	encoder := json.NewEncoder(file)
+	encoder.Encode(data)
+	return file.Close()
+}
+
 func dumpRegions(folder string, regions Regions) (err error) {
-	os.MkdirAll(folder, 0700)
 	for key, value := range regions {
-		var file *os.File
-		filename := fmt.Sprintf("%s/%d.json", folder, key)
-		file, err = os.Create(filename)
+		filepath := fmt.Sprintf("%s/%d.json", folder, key)
+		err = writeToFile(filepath, value)
 		if err != nil {
 			return
 		}
-		encoder := json.NewEncoder(file)
-		encoder.Encode(value)
-		file.Close()
+	}
+	return
+}
+
+func dumpIndexes(folder string, pages []*Page) error {
+	return writeToFile(fmt.Sprintf("%s/page-index.json", folder), pages)
+}
+
+func dumpDataLists(folder string, lists map[int][]*DataListing) (err error) {
+	for key, value := range lists {
+		filepath := fmt.Sprintf("%s/list-%d.json", folder, key)
+		err = writeToFile(filepath, value)
+		if err != nil {
+			return
+		}
 	}
 	return
 }
@@ -72,13 +98,35 @@ func ImportData(ctx context.Context, message PubSubMessage) error {
 
 	repository, _ := cloneRepo(folder, os.Getenv("GITHUB_TOKEN"), properties.Branch)
 
-	err = dumpRegions(fmt.Sprintf("%s/src/data/covid", folder), regions)
+	dataFolder := fmt.Sprintf("%s/data", folder)
+	os.MkdirAll(dataFolder, 0700)
+
+	pages, lists, indexesError := buildIndexes(regions)
+	if indexesError != nil {
+		return indexesError
+	}
+
+	err = dumpRegions(dataFolder, regions)
 	if err != nil {
 		return err
 	}
 
-	_, err = commitAll(repository, properties.CommitMessage, properties.CommiterName,
-		properties.CommiterEmail)
+	err = dumpIndexes(dataFolder, pages)
+	if err != nil {
+		return err
+	}
+
+	err = dumpDataLists(dataFolder, lists)
+	if err != nil {
+		return err
+	}
+
+	err = writeToFile(fmt.Sprintf("%s/last-updated.json", dataFolder), &LastUpdated{Date: time.Now()})
+	if err != nil {
+		return err
+	}
+
+	_, err = commitAll(repository, properties.CommitMessage, properties.CommiterName, properties.CommiterEmail)
 	if err != nil {
 		return err
 	}

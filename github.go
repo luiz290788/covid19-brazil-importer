@@ -10,7 +10,7 @@ import (
 )
 
 func cloneRepo(folder, password, branch string) (*git.Repository, error) {
-	url := fmt.Sprintf("https://luiz290788:%s@github.com/luiz290788/covid19-brazil.git", password)
+	url := fmt.Sprintf("https://luiz290788:%s@github.com/luiz290788/covid19-brazil-data.git", password)
 	return git.PlainClone(folder, false, &git.CloneOptions{
 		URL:           url,
 		Depth:         1,
@@ -26,7 +26,7 @@ func commitAll(repository *git.Repository, message, name, email string) (hash st
 		return
 	}
 
-	err = worktree.AddGlob("src/data/covid/*.json")
+	err = worktree.AddGlob("data/*.json")
 	if err != nil {
 		return
 	}
