@@ -30,7 +30,7 @@ func newDataListing(region *Region, parent *Region) *DataListing {
 }
 
 func buildIndexes(regions Regions) ([]*Page, map[int][]*DataListing, error) {
-	pages := make([]*Page, len(regions))
+	pages := make([]*Page, len(regions)-1)
 	dataListing := map[int][]*DataListing{}
 	regionIndex := 0
 	for _, region := range regions {
